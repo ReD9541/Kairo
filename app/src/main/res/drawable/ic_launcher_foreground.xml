@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Calendar Body (Indigo) -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M28,20 h52 c4.42,0 8,3.58 8,8 v52 c0,4.42 -3.58,8 -8,8 H28 c-4.42,0 -8,-3.58 -8,-8 V28 c0,-4.42 3.58,-8 8,-8 z" />
+
+    <!-- Calendar Header (Pink/Red) -->
+    <path
+        android:fillColor="#FF3366"
+        android:pathData="M20,28 c0,-4.42 3.58,-8 8,-8 h52 c4.42,0 8,3.58 8,8 v12 H20 z" />
+
+    <!-- Binders (White) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M36,12 v14 M72,12 v14" />
+
+    <!-- Transit Line (Cyan) -->
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 12,74 Q 33,74 54,54 T 96,34" />
+
+    <!-- Transit Stations (White with Cyan Stroke) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="2.5"
+        android:pathData="M 30,68 a 4,4 0 1,1 0,8 a 4,4 0 1,1 0,-8" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="2.5"
+        android:pathData="M 78,32 a 4,4 0 1,1 0,8 a 4,4 0 1,1 0,-8" />
+
+    <!-- Map Pin (White) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 54,36 C 44.06,36 36,44.06 36,54 C 36,67.5 54,86 54,86 C 54,86 72,67.5 72,54 C 72,44.06 63.94,36 54,36 Z" />
+
+    <!-- Clock Face (Indigo) -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M 54,45 a 9,9 0 1,1 0,18 a 9,9 0 1,1 0,-18" />
+
+    <!-- Clock Hands (Red/Pink) -->
+    <path
+        android:strokeColor="#FF3366"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M 54,49 V 54 H 58" />
+
+</vector>
