@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -149,6 +150,50 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { preferences -> 
             preferences[POMODORO_WORK_DURATION] = work
             preferences[POMODORO_BREAK_DURATION] = breakTime
+        }
+    }
+
+    suspend fun exportRemoteUserSettings(userId: String): com.example.kairo.data.remote.RemoteUserSettings {
+        val preferences = context.dataStore.data.first()
+        return com.example.kairo.data.remote.RemoteUserSettings(
+            id = userId,
+            userName = preferences[USER_NAME] ?: "",
+            wakeUpTime = preferences[WAKE_UP_TIME] ?: "07:00",
+            sleepTime = preferences[SLEEP_TIME] ?: "22:30",
+            workCalendarUrl = preferences[WORK_CALENDAR_URL] ?: "",
+            collegeCalendarUrl = preferences[COLLEGE_CALENDAR_URL] ?: "",
+            personalCalendarUrl = preferences[PERSONAL_CALENDAR_URL] ?: "",
+            homeLocation = preferences[HOME_LOCATION] ?: "",
+            workLocation = preferences[WORK_LOCATION] ?: "",
+            collegeLocation = preferences[COLLEGE_LOCATION] ?: "",
+            transportMode = preferences[TRANSPORT_MODE] ?: "All Public Transport",
+            pomodoroWorkDuration = preferences[POMODORO_WORK_DURATION] ?: "90",
+            pomodoroBreakDuration = preferences[POMODORO_BREAK_DURATION] ?: "15",
+            customMilestones = preferences[CUSTOM_MILESTONES] ?: "",
+            completedMilestones = preferences[COMPLETED_MILESTONES] ?: "",
+            mainGoalMilestones = preferences[MAIN_GOAL_MILESTONES] ?: "",
+            manualEvents = preferences[MANUAL_EVENTS] ?: ""
+        )
+    }
+
+    suspend fun importRemoteUserSettings(remote: com.example.kairo.data.remote.RemoteUserSettings) {
+        context.dataStore.edit { preferences ->
+            if (remote.userName.isNotBlank()) preferences[USER_NAME] = remote.userName
+            if (remote.wakeUpTime.isNotBlank()) preferences[WAKE_UP_TIME] = remote.wakeUpTime
+            if (remote.sleepTime.isNotBlank()) preferences[SLEEP_TIME] = remote.sleepTime
+            if (remote.workCalendarUrl.isNotBlank()) preferences[WORK_CALENDAR_URL] = remote.workCalendarUrl
+            if (remote.collegeCalendarUrl.isNotBlank()) preferences[COLLEGE_CALENDAR_URL] = remote.collegeCalendarUrl
+            if (remote.personalCalendarUrl.isNotBlank()) preferences[PERSONAL_CALENDAR_URL] = remote.personalCalendarUrl
+            if (remote.homeLocation.isNotBlank()) preferences[HOME_LOCATION] = remote.homeLocation
+            if (remote.workLocation.isNotBlank()) preferences[WORK_LOCATION] = remote.workLocation
+            if (remote.collegeLocation.isNotBlank()) preferences[COLLEGE_LOCATION] = remote.collegeLocation
+            if (remote.transportMode.isNotBlank()) preferences[TRANSPORT_MODE] = remote.transportMode
+            if (remote.pomodoroWorkDuration.isNotBlank()) preferences[POMODORO_WORK_DURATION] = remote.pomodoroWorkDuration
+            if (remote.pomodoroBreakDuration.isNotBlank()) preferences[POMODORO_BREAK_DURATION] = remote.pomodoroBreakDuration
+            if (remote.customMilestones.isNotBlank()) preferences[CUSTOM_MILESTONES] = remote.customMilestones
+            if (remote.completedMilestones.isNotBlank()) preferences[COMPLETED_MILESTONES] = remote.completedMilestones
+            if (remote.mainGoalMilestones.isNotBlank()) preferences[MAIN_GOAL_MILESTONES] = remote.mainGoalMilestones
+            if (remote.manualEvents.isNotBlank()) preferences[MANUAL_EVENTS] = remote.manualEvents
         }
     }
 }

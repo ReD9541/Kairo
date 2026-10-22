@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.kairo.data.PreferencesManager
+import com.example.kairo.data.repository.AuthRepository
 import com.example.kairo.domain.repository.CommuteRepository
 import com.example.kairo.data.repository.CommuteRepositoryImpl
 import com.example.kairo.data.remote.RetrofitClient
@@ -21,6 +22,15 @@ class SettingsViewModel(
     private val commuteRepository: CommuteRepository
 ) : AndroidViewModel(application) {
     private val preferencesManager = PreferencesManager(application)
+    private val authRepository = AuthRepository(preferencesManager)
+
+    val loggedInUserEmail: StateFlow<String?> = MutableStateFlow<String?>(null).apply {
+        viewModelScope.launch {
+            authRepository.sessionStatus.collectLatest { status ->
+                value = authRepository.currentUser?.email
+            }
+        }
+    }.asStateFlow()
 
     private val _workCalendarUrl = MutableStateFlow("")
     val workCalendarUrl: StateFlow<String> = _workCalendarUrl.asStateFlow()
@@ -174,6 +184,10 @@ class SettingsViewModel(
             preferencesManager.saveCollegeLocation(collegeLoc)
             preferencesManager.saveTransportMode(mode)
             preferencesManager.savePomodoroDurations(pomodoroWork, pomodoroBreak)
+            
+            authRepository.currentUser?.id?.let { userId ->
+                authRepository.pushLocalToRemote(userId)
+            }
             
             _validationResult.value = "All settings successfully saved!"
             _isValidatingWork.value = false

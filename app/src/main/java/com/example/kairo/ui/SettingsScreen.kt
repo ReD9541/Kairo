@@ -25,6 +25,8 @@ fun SettingsScreen() {
         factory = SettingsViewModel.provideFactory(application)
     )
 
+    val loggedInUserEmail by viewModel.loggedInUserEmail.collectAsState()
+
     val workUrl by viewModel.workCalendarUrl.collectAsState()
     val collegeUrl by viewModel.collegeCalendarUrl.collectAsState()
     val personalUrl by viewModel.personalCalendarUrl.collectAsState()
@@ -103,6 +105,34 @@ fun SettingsScreen() {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
+
+            // Cloud Sync Status Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (loggedInUserEmail != null) "Cloud Backup Active" else "Local Storage Only",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (loggedInUserEmail != null) "Synced with Supabase ($loggedInUserEmail)" else "Sign in on Profile tab to enable cross-device sync",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             // Section 1: Calendars
             Card(
                 modifier = Modifier.fillMaxWidth(),

@@ -13,6 +13,8 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 val tfnswApiKey = localProperties.getProperty("TFNSW_API_KEY")?.replace("\"", "") ?: ""
+val supabaseUrl = localProperties.getProperty("SUPABASE_URL")?.replace("\"", "") ?: "https://your-project-url.supabase.co"
+val supabaseAnonKey = localProperties.getProperty("SUPABASE_ANON_KEY")?.replace("\"", "") ?: "your-anon-key"
 
 android {
     namespace = "com.example.kairo"
@@ -29,6 +31,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TFNSW_API_KEY", "\"$tfnswApiKey\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
