@@ -1,41 +1,38 @@
 package com.example.kairo.ui
 
 import android.Manifest
-import android.app.Application
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.DirectionsTransit
 import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.FreeBreakfast
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.DateRange
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.res.painterResource
-import com.example.kairo.R
-import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.School
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kairo.domain.model.ScheduleItem
 import com.example.kairo.viewmodel.DashboardViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -51,6 +48,8 @@ fun DashboardScreen(
     onEventClick: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val quickMealActive by viewModel.quickMealActive.collectAsState()
+    val runningLateMins by viewModel.runningLateMins.collectAsState()
 
     val calendarPermissionState = rememberPermissionState(
         Manifest.permission.READ_CALENDAR
@@ -101,205 +100,231 @@ fun DashboardScreen(
                 modifier = Modifier.align(Alignment.Center)
             )
         } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    val now = System.currentTimeMillis()
-                    val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                    val greeting = when {
-                        currentHour < 12 -> "Good Morning"
-                        currentHour < 17 -> "Good Afternoon"
-                        else -> "Good Evening"
+            Column(modifier = Modifier.fillMaxSize()) {
+                val now = System.currentTimeMillis()
+                val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val greeting = when {
+                    currentHour < 12 -> "Good Morning"
+                    currentHour < 17 -> "Good Afternoon"
+                    else -> "Good Evening"
+                }
+
+                val dateFormatter = remember { SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()) }
+                val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+                
+                val selectedDateMillis by viewModel.selectedDateMillis.collectAsState()
+                val context = LocalContext.current
+
+                val selectedCal = remember(selectedDateMillis) {
+                    Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+                }
+
+                val mondayCal = remember(selectedDateMillis) {
+                    Calendar.getInstance().apply {
+                        firstDayOfWeek = Calendar.MONDAY
+                        timeInMillis = selectedDateMillis
+                        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
                     }
+                }
 
-                    val dateFormatter = remember { SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()) }
-                    val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-                    
-                    val selectedDateMillis by viewModel.selectedDateMillis.collectAsState()
-                    val context = LocalContext.current
+                val sundayCal = remember(mondayCal) {
+                    (mondayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 6) }
+                }
 
-                    val selectedCal = remember(selectedDateMillis) {
-                        Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
-                    }
-
-                    val mondayCal = remember(selectedDateMillis) {
-                        Calendar.getInstance().apply {
-                            firstDayOfWeek = Calendar.MONDAY
-                            timeInMillis = selectedDateMillis
-                            set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-                            set(Calendar.HOUR_OF_DAY, 0)
-                            set(Calendar.MINUTE, 0)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
+                val weekDays = remember(mondayCal) {
+                    (0..6).map { dayOffset ->
+                        (mondayCal.clone() as Calendar).apply {
+                            add(Calendar.DAY_OF_YEAR, dayOffset)
                         }
                     }
+                }
 
-                    val sundayCal = remember(mondayCal) {
-                        (mondayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 6) }
-                    }
+                fun isSameDay(c1: Calendar, c2: Calendar): Boolean {
+                    return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
+                           c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+                }
 
-                    val weekDays = remember(mondayCal) {
-                        (0..6).map { dayOffset ->
-                            (mondayCal.clone() as Calendar).apply {
-                                add(Calendar.DAY_OF_YEAR, dayOffset)
-                            }
-                        }
-                    }
+                val rangeFormatter = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
+                val weekRangeText = "${rangeFormatter.format(mondayCal.time)} - ${rangeFormatter.format(sundayCal.time)}"
 
-                    fun isSameDay(c1: Calendar, c2: Calendar): Boolean {
-                        return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
-                               c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
-                    }
+                // Monday-Sunday Date Carousel
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    weekDays.forEach { dayCal ->
+                        val isSelected = isSameDay(dayCal, selectedCal)
+                        val isToday = isSameDay(dayCal, Calendar.getInstance())
+                        val dateText = SimpleDateFormat("EEE\nd", Locale.getDefault()).format(dayCal.time)
 
-                    val rangeFormatter = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
-                    val weekRangeText = "${rangeFormatter.format(mondayCal.time)} - ${rangeFormatter.format(sundayCal.time)}"
-
-                    // Monday-Sunday Date Carousel
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        weekDays.forEach { dayCal ->
-                            val isSelected = isSameDay(dayCal, selectedCal)
-                            val isToday = isSameDay(dayCal, Calendar.getInstance())
-                            val dateText = SimpleDateFormat("EEE\nd", Locale.getDefault()).format(dayCal.time)
-
-                            Surface(
-                                modifier = Modifier.clickable { viewModel.setSelectedDate(dayCal.timeInMillis) },
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
-                                border = when {
-                                    isSelected -> null
-                                    isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                                    else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                }
-                            ) {
-                                Text(
-                                    text = dateText,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-
-                    // Action Controls Row (Choose Week & Ongoing Week)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                android.app.DatePickerDialog(
-                                    context,
-                                    { _, y, m, d ->
-                                        val pickedCal = Calendar.getInstance().apply {
-                                            set(y, m, d, 12, 0, 0)
-                                        }
-                                        viewModel.setSelectedDate(pickedCal.timeInMillis)
-                                    },
-                                    selectedCal.get(Calendar.YEAR),
-                                    selectedCal.get(Calendar.MONTH),
-                                    selectedCal.get(Calendar.DAY_OF_MONTH)
-                                ).show()
-                            },
-                            modifier = Modifier.height(40.dp),
+                        Surface(
+                            modifier = Modifier.clickable { viewModel.setSelectedDate(dayCal.timeInMillis) },
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                            border = when {
+                                isSelected -> null
+                                isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            }
                         ) {
-                            Icon(Icons.Rounded.DateRange, contentDescription = "Choose Week", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Choose Week", style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                            Text(
+                                text = dateText,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
                         }
+                    }
+                }
 
+                // Action Controls Row (Choose Week & Ongoing Week)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            android.app.DatePickerDialog(
+                                context,
+                                { _, y, m, d ->
+                                    val pickedCal = Calendar.getInstance().apply {
+                                        set(y, m, d, 12, 0, 0)
+                                    }
+                                    viewModel.setSelectedDate(pickedCal.timeInMillis)
+                                },
+                                selectedCal.get(Calendar.YEAR),
+                                selectedCal.get(Calendar.MONTH),
+                                selectedCal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        },
+                        modifier = Modifier.height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = "Choose Week", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Choose Week", style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                    }
+
+                    Text(
+                        text = weekRangeText,
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    TextButton(
+                        onClick = { viewModel.resetToCurrentWeek() },
+                        modifier = Modifier.height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "Ongoing Week", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Ongoing Week", style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                    }
+                }
+
+                // Quick Action Bar for Human Schedule Adjustments
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = quickMealActive,
+                        onClick = { viewModel.toggleQuickMealMode() },
+                        label = { Text("Quick Meal Today (25m)", fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Rounded.Restaurant, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+
+                    FilterChip(
+                        selected = runningLateMins > 0,
+                        onClick = {
+                            if (runningLateMins > 0) viewModel.resetRunningLate() else viewModel.addRunningLate15Mins()
+                        },
+                        label = {
+                            Text(if (runningLateMins > 0) "Running Late (+${runningLateMins}m)" else "+15m Late Offset", fontSize = 12.sp)
+                        },
+                        leadingIcon = { Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
                         Text(
-                            text = weekRangeText,
-                            style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                            text = greeting,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = dateFormatter.format(Date(now)),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
-                        TextButton(
-                            onClick = { viewModel.resetToCurrentWeek() },
-                            modifier = Modifier.height(40.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = "Ongoing Week", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Ongoing Week", style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
-                        }
                     }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
                     ) {
-                        Column {
-                            Text(
-                                text = greeting,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = dateFormatter.format(Date(now)),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Text(
-                                text = timeFormatter.format(Date(now)),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
+                        Text(
+                            text = timeFormatter.format(Date(now)),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
                     }
+                }
 
-                    val listState = rememberLazyListState()
-                    val currentIndex = remember(uiState.scheduleItems) {
-                        uiState.scheduleItems.indexOfFirst { it.endTime >= now }.coerceAtLeast(0)
+                val listState = rememberLazyListState()
+                val currentIndex = remember(uiState.scheduleItems) {
+                    uiState.scheduleItems.indexOfFirst { it.endTime >= now }.coerceAtLeast(0)
+                }
+
+                LaunchedEffect(uiState.scheduleItems) {
+                    if (uiState.scheduleItems.isNotEmpty() && currentIndex >= 0) {
+                        listState.scrollToItem(currentIndex)
                     }
+                }
 
-                    LaunchedEffect(uiState.scheduleItems) {
-                        if (uiState.scheduleItems.isNotEmpty() && currentIndex >= 0) {
-                            listState.scrollToItem(currentIndex)
-                        }
-                    }
-
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .navigationBarsPadding(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(uiState.scheduleItems, key = { it.id }) { item ->
-                            ScheduleItemTimelineCard(
-                                item = item,
-                                currentTimeMillis = now,
-                                onClick = { onEventClick(item.id) }
-                            )
-                        }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(uiState.scheduleItems, key = { it.id }) { item ->
+                        ScheduleItemTimelineCard(
+                            item = item,
+                            currentTimeMillis = now,
+                            onClick = { onEventClick(item.id) }
+                        )
                     }
                 }
             }
         }
     }
+}
 
 @Composable
 fun ScheduleItemTimelineCard(
@@ -314,10 +339,18 @@ fun ScheduleItemTimelineCard(
     val isPast = item.endTime < currentTimeMillis
     val isActive = currentTimeMillis in item.startTime..item.endTime
 
-    val (containerColor, contentColor) = when (item) {
-        is ScheduleItem.Event -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
-        is ScheduleItem.Transit -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-        is ScheduleItem.FocusBlock -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+    val (containerColor, contentColor, icon) = when (item) {
+        is ScheduleItem.Event -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.Event)
+        is ScheduleItem.TransitTo -> Triple(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, Icons.Rounded.DirectionsTransit)
+        is ScheduleItem.TransitHome -> Triple(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, Icons.Rounded.Home)
+        is ScheduleItem.Decompression -> Triple(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer, Icons.Rounded.SelfImprovement)
+        is ScheduleItem.MorningRoutine -> Triple(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, Icons.Rounded.WbSunny)
+        is ScheduleItem.MealPrepAndEat -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, Icons.Rounded.Restaurant)
+        is ScheduleItem.StudySetup -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.secondary, Icons.Rounded.Build)
+        is ScheduleItem.DeepStudy -> Triple(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, Icons.Rounded.School)
+        is ScheduleItem.MicroBreak -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.FreeBreakfast)
+        is ScheduleItem.Sleep -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.Bedtime)
+        is ScheduleItem.FocusBlock -> Triple(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer, Icons.Rounded.Psychology)
     }
 
     Row(
@@ -326,7 +359,6 @@ fun ScheduleItemTimelineCard(
             .height(IntrinsicSize.Min)
             .alpha(if (isPast) 0.45f else 1.0f)
     ) {
-        // Timeline Column - Bigger font and wider column
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(78.dp).fillMaxHeight()
@@ -347,7 +379,6 @@ fun ScheduleItemTimelineCard(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Card Content - Sharper corners
         Card(
             modifier = Modifier
                 .weight(1f)
@@ -362,11 +393,7 @@ fun ScheduleItemTimelineCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Icon(
-                    imageVector = when (item) {
-                        is ScheduleItem.Event -> Icons.Rounded.Event
-                        is ScheduleItem.Transit -> Icons.Rounded.DirectionsTransit
-                        is ScheduleItem.FocusBlock -> Icons.Rounded.Psychology
-                    },
+                    imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp).padding(top = 2.dp),
                     tint = contentColor

@@ -1,11 +1,15 @@
 package com.example.kairo.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.*
@@ -15,20 +19,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
 import com.example.kairo.domain.model.ScheduleItem
+import com.example.kairo.domain.model.TransitLeg
+import com.example.kairo.ui.theme.KairoTheme
 import com.example.kairo.viewmodel.DashboardViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-
-import com.example.kairo.ui.theme.KairoTheme
 
 @Composable
 fun EventDetailPopup(
@@ -41,7 +42,18 @@ fun EventDetailPopup(
 
     val formatter = remember { SimpleDateFormat("hh:mm a, EEE, d MMM yyyy", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    val isTransit = item is ScheduleItem.Transit
+
+    val isTransit = item is ScheduleItem.TransitTo || item is ScheduleItem.TransitHome
+    val transitLegs: List<TransitLeg> = when (item) {
+        is ScheduleItem.TransitTo -> item.legs
+        is ScheduleItem.TransitHome -> item.legs
+        else -> emptyList()
+    }
+    val transitDurationMillis: Long = when (item) {
+        is ScheduleItem.TransitTo -> item.durationMillis
+        is ScheduleItem.TransitHome -> item.durationMillis
+        else -> 0L
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -73,7 +85,6 @@ fun EventDetailPopup(
                             )
                         } else {
                             Column(modifier = Modifier.wrapContentHeight()) {
-                                // Title and Close Row
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -92,8 +103,7 @@ fun EventDetailPopup(
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                if (isTransit && item is ScheduleItem.Transit) {
-                                    // Scrollable list for Transit items
+                                if (isTransit) {
                                     LazyColumn(
                                         modifier = Modifier.weight(1f),
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -112,12 +122,12 @@ fun EventDetailPopup(
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(Icons.Rounded.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                                     Spacer(modifier = Modifier.width(12.dp))
-                                                    Text(text = "${item.durationMillis / 60000} minutes commute", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text(text = "${transitDurationMillis / 60000} minutes commute", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
                                         }
 
-                                        if (item.legs.isNotEmpty()) {
+                                        if (transitLegs.isNotEmpty()) {
                                             item {
                                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                                     Text(
@@ -126,7 +136,6 @@ fun EventDetailPopup(
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
 
-                                                    // Horizontal Mode Badges Summary
                                                     Row(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
@@ -134,7 +143,7 @@ fun EventDetailPopup(
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        item.legs.forEachIndexed { idx, leg ->
+                                                        transitLegs.forEachIndexed { idx, leg ->
                                                             val modeColor = when (leg.transportationType) {
                                                                 "Train" -> Color(0xFFE05252)
                                                                 "Bus", "Coach" -> Color(0xFF00B2A9)
@@ -153,7 +162,7 @@ fun EventDetailPopup(
                                                             Surface(
                                                                 shape = RoundedCornerShape(8.dp),
                                                                 color = modeColor.copy(alpha = 0.2f),
-                                                                border = androidx.compose.foundation.BorderStroke(1.dp, modeColor)
+                                                                border = BorderStroke(1.dp, modeColor)
                                                             ) {
                                                                 Row(
                                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -174,7 +183,7 @@ fun EventDetailPopup(
                                                                     )
                                                                 }
                                                             }
-                                                            if (idx < item.legs.size - 1) {
+                                                            if (idx < transitLegs.size - 1) {
                                                                 Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                             }
                                                         }
@@ -182,7 +191,7 @@ fun EventDetailPopup(
                                                 }
                                             }
 
-                                            itemsIndexed(item.legs) { index, leg ->
+                                            itemsIndexed(transitLegs) { index, leg ->
                                                 val modeColor = when (leg.transportationType) {
                                                     "Train" -> Color(0xFFE05252)
                                                     "Bus", "Coach" -> Color(0xFF00B2A9)
@@ -202,7 +211,6 @@ fun EventDetailPopup(
                                                         .fillMaxWidth()
                                                         .height(IntrinsicSize.Min)
                                                 ) {
-                                                    // Left Vertical Line & Dot
                                                     Column(
                                                         horizontalAlignment = Alignment.CenterHorizontally,
                                                         modifier = Modifier.width(32.dp).fillMaxHeight()
@@ -219,7 +227,7 @@ fun EventDetailPopup(
                                                                 .weight(1f)
                                                                 .background(modeColor.copy(alpha = 0.6f))
                                                         )
-                                                        if (index == item.legs.size - 1) {
+                                                        if (index == transitLegs.size - 1) {
                                                             Box(
                                                                 modifier = Modifier
                                                                     .size(12.dp)
@@ -231,7 +239,6 @@ fun EventDetailPopup(
 
                                                     Spacer(modifier = Modifier.width(12.dp))
 
-                                                    // Step Information Card
                                                     Column(
                                                         modifier = Modifier.weight(1f).padding(bottom = 16.dp)
                                                     ) {
@@ -261,9 +268,8 @@ fun EventDetailPopup(
                                                                           leg.transportationName.contains("Bus", ignoreCase = true) || 
                                                                           leg.transportationName.contains("Line", ignoreCase = true) ||
                                                                           Regex("""\b(T[0-9]|B[0-9]|[0-9]{3})\b""").containsMatchIn(leg.transportationName)
-                                                        val isWalkLeg = !isTransitLeg
 
-                                                        if (!isWalkLeg && !leg.originPlatform.isNullOrBlank()) {
+                                                        if (isTransitLeg && !leg.originPlatform.isNullOrBlank()) {
                                                             val platformText = if (leg.originPlatform.contains("Platform", ignoreCase = true) || leg.originPlatform.contains("Stand", ignoreCase = true)) {
                                                                 leg.originPlatform
                                                             } else {
@@ -286,8 +292,7 @@ fun EventDetailPopup(
                                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                val isWalkLegInner = !isTransitLeg
-                                                                val shortName = if (isWalkLegInner) "Walk" else {
+                                                                val shortName = if (!isTransitLeg) "Walk" else {
                                                                     Regex("""\b([A-Z0-9]{2,3})\b""").find(leg.transportationName)?.value ?: leg.transportationName.take(15)
                                                                 }
                                                                 Text(
@@ -313,7 +318,7 @@ fun EventDetailPopup(
                                                                     style = MaterialTheme.typography.bodyMedium,
                                                                     color = MaterialTheme.colorScheme.onSurface
                                                                 )
-                                                                if (!isWalkLeg && !leg.destinationPlatform.isNullOrBlank()) {
+                                                                if (isTransitLeg && !leg.destinationPlatform.isNullOrBlank()) {
                                                                     val destPlatformText = if (leg.destinationPlatform.contains("Platform", ignoreCase = true) || leg.destinationPlatform.contains("Stand", ignoreCase = true)) {
                                                                         leg.destinationPlatform
                                                                     } else {
@@ -326,8 +331,7 @@ fun EventDetailPopup(
                                                                     )
                                                                 }
 
-                                                                // Calculate transfer / wait time between legs
-                                                                val nextLeg = item.legs.getOrNull(index + 1)
+                                                                val nextLeg = transitLegs.getOrNull(index + 1)
                                                                 if (nextLeg != null) {
                                                                     val currentArrMs = try {
                                                                         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.parse(leg.arrivalTime)?.time ?: 0L
@@ -370,7 +374,6 @@ fun EventDetailPopup(
                                         }
                                     }
                                 } else {
-                                    // Compact non-transit layout for Events & Focus Blocks
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -402,12 +405,33 @@ fun EventDetailPopup(
                                                     Text(text = item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
+                                            is ScheduleItem.Decompression -> {
+                                                Text(text = item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.MorningRoutine -> {
+                                                Text(text = "Activities: ${item.activities.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.MealPrepAndEat -> {
+                                                Text(text = "Type: ${item.mealType}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.StudySetup -> {
+                                                Text(text = item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.DeepStudy -> {
+                                                Text(text = "Task: ${item.taskName}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.MicroBreak -> {
+                                                Text(text = item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            is ScheduleItem.Sleep -> {
+                                                Text(text = item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
                                             is ScheduleItem.FocusBlock -> {
                                                 val mins = (item.endTime - item.startTime) / 60000
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(Icons.Rounded.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                                     Spacer(modifier = Modifier.width(12.dp))
-                                                    Text(text = "$mins minutes session", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text(text = "$mins minutes block", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                                 if (item.suggestedActivities.isNotEmpty()) {
                                                     Spacer(modifier = Modifier.height(4.dp))
@@ -421,14 +445,6 @@ fun EventDetailPopup(
                                         }
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                KairoButton(
-                                    text = "Done",
-                                    onClick = onDismiss,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
                             }
                         }
                     }

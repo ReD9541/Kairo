@@ -13,8 +13,8 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 val tfnswApiKey = localProperties.getProperty("TFNSW_API_KEY")?.replace("\"", "") ?: ""
-val supabaseUrl = localProperties.getProperty("SUPABASE_URL")?.replace("\"", "") ?: "https://your-project-url.supabase.co"
-val supabaseAnonKey = localProperties.getProperty("SUPABASE_ANON_KEY")?.replace("\"", "") ?: "your-anon-key"
+val supabaseUrl = localProperties.getProperty("SUPABASE_URL")?.replace("\"", "") ?: "https://mtakcvsjjfvolywhdtcl.supabase.co"
+val supabaseAnonKey = localProperties.getProperty("SUPABASE_ANON_KEY")?.replace("\"", "") ?: "sb_publishable_i6Zp4d1sZhFfJneOCRLf8Q_LKhRvJOZ"
 
 android {
     namespace = "com.example.kairo"

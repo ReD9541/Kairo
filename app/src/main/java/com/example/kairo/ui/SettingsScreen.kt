@@ -2,8 +2,6 @@ package com.example.kairo.ui
 
 import android.app.Application
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -37,6 +35,13 @@ fun SettingsScreen() {
     val pomodoroWork by viewModel.pomodoroWorkDuration.collectAsState()
     val pomodoroBreak by viewModel.pomodoroBreakDuration.collectAsState()
 
+    val morningMins by viewModel.morningRoutineMins.collectAsState()
+    val decompressMins by viewModel.postCommuteDecompressMins.collectAsState()
+    val studyPrepMins by viewModel.studyPrepBufferMins.collectAsState()
+    val lunchMins by viewModel.lunchDurationMins.collectAsState()
+    val dinnerMins by viewModel.dinnerPrepAndEatMins.collectAsState()
+    val minStudyMins by viewModel.minStudySlotMins.collectAsState()
+
     val isValidatingWork by viewModel.isValidatingWork.collectAsState()
     val validationResult by viewModel.validationResult.collectAsState()
     
@@ -53,6 +58,13 @@ fun SettingsScreen() {
     var tempTransportMode by remember(transportMode) { mutableStateOf(transportMode) }
     var tempPomodoroWork by remember(pomodoroWork) { mutableStateOf(pomodoroWork) }
     var tempPomodoroBreak by remember(pomodoroBreak) { mutableStateOf(pomodoroBreak) }
+
+    var tempMorning by remember(morningMins) { mutableStateOf(morningMins) }
+    var tempDecompress by remember(decompressMins) { mutableStateOf(decompressMins) }
+    var tempStudyPrep by remember(studyPrepMins) { mutableStateOf(studyPrepMins) }
+    var tempLunch by remember(lunchMins) { mutableStateOf(lunchMins) }
+    var tempDinner by remember(dinnerMins) { mutableStateOf(dinnerMins) }
+    var tempMinStudy by remember(minStudyMins) { mutableStateOf(minStudyMins) }
 
     var expandedHome by remember { mutableStateOf(false) }
     var expandedWork by remember { mutableStateOf(false) }
@@ -200,7 +212,7 @@ fun SettingsScreen() {
                                     onClick = {
                                         tempHomeLocation = suggestion
                                         expandedHome = false
-                                        // Optional: Clear suggestions logic
+                                        viewModel.clearHomeSuggestions()
                                     }
                                 )
                             }
@@ -327,6 +339,80 @@ fun SettingsScreen() {
                 }
             }
 
+            // Section 4: Human Routine & Buffers
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
+                ) {
+                    Text("Human Routine & Buffers", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        KairoTextField(
+                            value = tempMorning,
+                            onValueChange = { tempMorning = it },
+                            label = "Morning Routine (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        KairoTextField(
+                            value = tempDecompress,
+                            onValueChange = { tempDecompress = it },
+                            label = "Wind-Down / Unwind (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        KairoTextField(
+                            value = tempLunch,
+                            onValueChange = { tempLunch = it },
+                            label = "Lunch Time (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        KairoTextField(
+                            value = tempDinner,
+                            onValueChange = { tempDinner = it },
+                            label = "Dinner Prep & Eat (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        KairoTextField(
+                            value = tempStudyPrep,
+                            onValueChange = { tempStudyPrep = it },
+                            label = "Study Setup Prep (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        KairoTextField(
+                            value = tempMinStudy,
+                            onValueChange = { tempMinStudy = it },
+                            label = "Min Study Slot (min)",
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+
             KairoButton(
                 text = "Save All Settings",
                 onClick = { 
@@ -339,7 +425,13 @@ fun SettingsScreen() {
                         collegeLoc = tempCollegeLocation,
                         mode = tempTransportMode,
                         pomodoroWork = tempPomodoroWork,
-                        pomodoroBreak = tempPomodoroBreak
+                        pomodoroBreak = tempPomodoroBreak,
+                        morning = tempMorning,
+                        decompress = tempDecompress,
+                        studyPrep = tempStudyPrep,
+                        lunch = tempLunch,
+                        dinner = tempDinner,
+                        minStudy = tempMinStudy
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),

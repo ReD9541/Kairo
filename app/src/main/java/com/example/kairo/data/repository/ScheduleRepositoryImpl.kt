@@ -23,18 +23,20 @@ class ScheduleRepositoryImpl(
         val workLocation = preferencesManager.workLocationFlow.firstOrNull() ?: ""
         val collegeLocation = preferencesManager.collegeLocationFlow.firstOrNull() ?: ""
         
-        fun resolveLoc(rawLoc: String?, defaultLoc: String = ""): String? {
-            val target = rawLoc?.trim()
-            if (target.isNullOrBlank()) return defaultLoc.ifBlank { null }
-            return when {
-                target.contains("Microsoft Teams Meeting", ignoreCase = true) ||
-                target.contains("Teams Meeting", ignoreCase = true) ||
-                target.equals("Teams", ignoreCase = true) -> homeLocation.ifBlank { "Home" }
-                target.equals("Home", ignoreCase = true) -> homeLocation.ifBlank { rawLoc }
-                target.equals("Work", ignoreCase = true) -> workLocation.ifBlank { rawLoc }
-                target.equals("College", ignoreCase = true) -> collegeLocation.ifBlank { rawLoc }
-                else -> rawLoc
+        fun resolveEventLocation(rawLoc: String?, defaultLocSetting: String): String? {
+            val trimmed = rawLoc?.trim()
+            if (trimmed.isNullOrBlank()) return defaultLocSetting.ifBlank { null }
+            if (trimmed.contains("Microsoft Teams Meeting", ignoreCase = true) ||
+                trimmed.contains("Teams Meeting", ignoreCase = true) ||
+                trimmed.equals("Teams", ignoreCase = true)) {
+                return homeLocation.ifBlank { "Home" }
             }
+            if (trimmed.equals("Home", ignoreCase = true)) return homeLocation.ifBlank { trimmed }
+            if (trimmed.equals("Work", ignoreCase = true)) return workLocation.ifBlank { trimmed }
+            if (trimmed.equals("College", ignoreCase = true) || trimmed.equals("Campus", ignoreCase = true)) return collegeLocation.ifBlank { trimmed }
+            
+            // Keep the specific original address if present
+            return trimmed
         }
 
         val rawWorkEvents = if (workUrl.isNotBlank()) iCalDataSource.fetchEvents(workUrl) else emptyList()
@@ -42,30 +44,30 @@ class ScheduleRepositoryImpl(
         val rawPersonalEvents = if (personalUrl.isNotBlank()) iCalDataSource.fetchEvents(personalUrl) else emptyList()
         
         val workEvents = rawWorkEvents.map { 
-            val loc = it.location?.trim() ?: ""
-            if (loc.contains("Microsoft Teams Meeting", ignoreCase = true) || loc.contains("Teams Meeting", ignoreCase = true)) {
-                it.copy(location = homeLocation.ifBlank { "Home" })
-            } else if (workLocation.isNotBlank()) {
-                it.copy(location = workLocation)
-            } else it
+            it.copy(location = resolveEventLocation(it.location, workLocation))
         }
         val collegeEvents = rawCollegeEvents.map {
-            val loc = it.location?.trim() ?: ""
-            if (loc.contains("Microsoft Teams Meeting", ignoreCase = true) || loc.contains("Teams Meeting", ignoreCase = true)) {
-                it.copy(location = homeLocation.ifBlank { "Home" })
-            } else if (collegeLocation.isNotBlank()) {
-                it.copy(location = collegeLocation)
-            } else it
+            it.copy(location = resolveEventLocation(it.location, collegeLocation))
         }
         val personalEvents = rawPersonalEvents.map {
-            it.copy(location = resolveLoc(it.location))
+            it.copy(location = resolveEventLocation(it.location, homeLocation))
         }
         val mappedLocalEvents = localEvents.map {
-            it.copy(location = resolveLoc(it.location))
+            it.copy(location = resolveEventLocation(it.location, homeLocation))
+        }
+
+        fun isAssignmentOrDeadline(event: CalendarEvent): Boolean {
+            val title = event.title.lowercase()
+            val desc = event.description?.lowercase() ?: ""
+            return title.contains("assignment") || title.contains("submission") ||
+                   title.contains("due") || title.contains("prototype") ||
+                   title.contains("quiz") || title.contains("deadline") ||
+                   desc.contains("due date") || desc.contains("submission") ||
+                   Regex("""\b(a[1-9]|m[1-9]|p[1-9])\b""").containsMatchIn(title)
         }
 
         val allEvents = (mappedLocalEvents + workEvents + collegeEvents + personalEvents).filter {
-            it.startTime >= startTimeMillis && it.startTime <= endTimeMillis
+            it.endTime > startTimeMillis && it.startTime < endTimeMillis && !isAssignmentOrDeadline(it)
         }
 
         // Deduplicate events that have matching titles and start/end times
@@ -84,7 +86,6 @@ class ScheduleRepositoryImpl(
                 val existingLoc = existing.location ?: ""
                 val newLoc = event.location ?: ""
                 
-                // If the new location perfectly matches our custom settings, prefer it
                 if (newLoc.isNotBlank() && (newLoc == workLocation || newLoc == collegeLocation || newLoc == homeLocation)) {
                     deduplicatedEvents[duplicateIndex] = event
                 } else if (existingLoc.isBlank() && newLoc.isNotBlank()) {

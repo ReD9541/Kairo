@@ -4,26 +4,25 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.kairo.data.PreferencesManager
 import com.example.kairo.data.local.CalendarProviderDataSource
+import com.example.kairo.data.remote.ICalDataSource
 import com.example.kairo.data.remote.RetrofitClient
 import com.example.kairo.data.repository.CommuteRepositoryImpl
 import com.example.kairo.data.repository.ScheduleRepositoryImpl
-import com.example.kairo.domain.model.ScheduleItem
-import com.example.kairo.domain.usecase.CalculateCommuteUseCase
 import com.example.kairo.domain.model.CalendarEvent
-import com.example.kairo.data.remote.ICalDataSource
-import com.example.kairo.data.PreferencesManager
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.serialization.json.Json
-import com.example.kairo.viewmodel.Milestone
-import kotlinx.coroutines.flow.StateFlow
+import com.example.kairo.domain.model.ScheduleItem
 import com.example.kairo.domain.repository.CommuteRepository
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.debounce
+import com.example.kairo.domain.usecase.CalculateCommuteUseCase
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -45,17 +44,6 @@ class DashboardViewModel(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState
 
-    init {
-        viewModelScope.launch {
-            // Observe preferences with debounce to avoid firing multiple concurrent network calls on startup
-            preferencesManager.preferencesFlow
-                .debounce(300)
-                .collectLatest {
-                    loadSchedule()
-                }
-        }
-    }
-
     private var loadJob: Job? = null
     
     private val _selectedDateMillis = MutableStateFlow(System.currentTimeMillis())
@@ -70,7 +58,33 @@ class DashboardViewModel(
     private val _locationSuggestions = MutableStateFlow<List<String>>(emptyList())
     val locationSuggestions: StateFlow<List<String>> = _locationSuggestions.asStateFlow()
 
+    private val _quickMealActive = MutableStateFlow(false)
+    val quickMealActive: StateFlow<Boolean> = _quickMealActive.asStateFlow()
+
+    private val _runningLateMins = MutableStateFlow(0)
+    val runningLateMins: StateFlow<Int> = _runningLateMins.asStateFlow()
+
     private var searchJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            preferencesManager.quickMealModeFlow.collectLatest {
+                _quickMealActive.value = it
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.runningLateMinsFlow.collectLatest {
+                _runningLateMins.value = it
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.preferencesFlow
+                .debounce(300)
+                .collectLatest {
+                    loadSchedule()
+                }
+        }
+    }
 
     fun clearAddEventError() {
         _addEventError.value = null
@@ -83,7 +97,7 @@ class DashboardViewModel(
             return
         }
         searchJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(300) // Debounce typing
+            delay(300)
             _locationSuggestions.value = commuteRepository.getLocationSuggestions(query)
         }
     }
@@ -102,6 +116,32 @@ class DashboardViewModel(
         loadSchedule()
     }
 
+    fun toggleQuickMealMode() {
+        viewModelScope.launch {
+            val newMode = !_quickMealActive.value
+            _quickMealActive.value = newMode
+            preferencesManager.toggleQuickMealMode(newMode)
+            loadSchedule()
+        }
+    }
+
+    fun addRunningLate15Mins() {
+        viewModelScope.launch {
+            val newMins = _runningLateMins.value + 15
+            _runningLateMins.value = newMins
+            preferencesManager.setRunningLateMins(newMins)
+            loadSchedule()
+        }
+    }
+
+    fun resetRunningLate() {
+        viewModelScope.launch {
+            _runningLateMins.value = 0
+            preferencesManager.setRunningLateMins(0)
+            loadSchedule()
+        }
+    }
+
     fun loadSchedule() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -110,44 +150,72 @@ class DashboardViewModel(
                 val wakeStr = preferencesManager.wakeUpTimeFlow.firstOrNull() ?: "07:00"
                 val sleepStr = preferencesManager.sleepTimeFlow.firstOrNull() ?: "22:30"
                 
+                val morningMinsVal = preferencesManager.morningRoutineMinsFlow.firstOrNull()?.toLongOrNull() ?: 40L
+                val decompressMinsVal = preferencesManager.postCommuteDecompressMinsFlow.firstOrNull()?.toLongOrNull() ?: 35L
+                val studyPrepMinsVal = preferencesManager.studyPrepBufferMinsFlow.firstOrNull()?.toLongOrNull() ?: 15L
+                val lunchMinsVal = preferencesManager.lunchDurationMinsFlow.firstOrNull()?.toLongOrNull() ?: 45L
+                val isQuickMeal = preferencesManager.quickMealModeFlow.firstOrNull() ?: false
+                val dinnerMinsVal = if (isQuickMeal) 25L else (preferencesManager.dinnerPrepAndEatMinsFlow.firstOrNull()?.toLongOrNull() ?: 60L)
+                val minStudySlotMinsVal = preferencesManager.minStudySlotMinsFlow.firstOrNull()?.toLongOrNull() ?: 35L
+                val runningLate = preferencesManager.runningLateMinsFlow.firstOrNull() ?: 0
+
                 val wakeParts = wakeStr.split(":").map { it.toIntOrNull() ?: 0 }
                 val sleepParts = sleepStr.split(":").map { it.toIntOrNull() ?: 0 }
 
-                // Determine time window for the selected date
+                // Selected Day Start (Wake Up)
                 val cal = Calendar.getInstance()
                 cal.timeInMillis = _selectedDateMillis.value
-                
                 cal.set(Calendar.HOUR_OF_DAY, wakeParts.getOrElse(0) { 7 })
                 cal.set(Calendar.MINUTE, wakeParts.getOrElse(1) { 0 })
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                val dayStart = cal.timeInMillis
+                
+                val baseDayStart = cal.timeInMillis
+                val dayStart = baseDayStart + (runningLate * 60 * 1000L)
 
+                // Next Day Start (Strict Day Boundary)
+                val nextDayCal = (cal.clone() as Calendar).apply {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+                val nextDayStart = nextDayCal.timeInMillis
+
+                // Base Sleep Time on Selected Day
                 cal.set(Calendar.HOUR_OF_DAY, sleepParts.getOrElse(0) { 22 })
                 cal.set(Calendar.MINUTE, sleepParts.getOrElse(1) { 30 })
                 var dayEnd = cal.timeInMillis
 
-                // If sleep time is early morning (e.g. 02:00) and wake time is morning (07:00), 
-                // the sleep time actually refers to the next day.
-                if (dayEnd < dayStart) {
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
-                    dayEnd = cal.timeInMillis
+                if (dayEnd < baseDayStart) {
+                    dayEnd += 24 * 60 * 60 * 1000L
                 }
 
-                // Fetch events
-                val events = scheduleRepository.getEvents(dayStart, dayEnd)
+                val queryStart = baseDayStart - (4 * 60 * 60 * 1000L)
+                val queryEnd = nextDayStart + (12 * 60 * 60 * 1000L)
 
-                val items = mutableListOf<ScheduleItem>()
+                val events = scheduleRepository.getEvents(queryStart, queryEnd)
                 
-                // Add manual events from Preferences
                 val manualEventsJson = preferencesManager.manualEventsFlow.firstOrNull() ?: ""
                 val manualEvents = try {
                     if (manualEventsJson.isNotBlank()) kotlinx.serialization.json.Json.decodeFromString<List<CalendarEvent>>(manualEventsJson) else emptyList()
                 } catch(e: Exception) { emptyList() }
                 
-                val allEvents = (events + manualEvents).filter {
-                    it.startTime >= dayStart && it.endTime <= dayEnd
+                val dayEvents = (events + manualEvents).filter {
+                    it.startTime >= dayStart && it.startTime < nextDayStart
                 }.sortedBy { it.startTime }
+
+                val maxEventEnd = dayEvents.maxOfOrNull { it.endTime } ?: 0L
+                if (maxEventEnd > dayEnd) {
+                    dayEnd = minOf(nextDayStart, maxEventEnd + (2 * 60 * 60 * 1000L))
+                }
+
+                val cal21 = (cal.clone() as Calendar).apply {
+                    set(Calendar.HOUR_OF_DAY, 21)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }.timeInMillis
+
+                val lateShiftEvent = dayEvents.firstOrNull { it.endTime >= cal21 || (it.startTime >= cal21 - (4 * 60 * 60 * 1000L) && it.title.contains("Work|Shift|Class", ignoreCase = true)) }
+                val hasLateShift = lateShiftEvent != null
+                val lateShiftStart = lateShiftEvent?.startTime ?: Long.MAX_VALUE
 
                 val homeLocation = preferencesManager.homeLocationFlow.firstOrNull()?.takeIf { it.isNotBlank() } ?: "Home"
                 val workLocation = preferencesManager.workLocationFlow.firstOrNull()?.takeIf { it.isNotBlank() }
@@ -162,13 +230,8 @@ class DashboardViewModel(
                            trimmed.equals("Teams", ignoreCase = true)
                 }
 
-                // Convert CalendarEvent to ScheduleItem.Event
-                val mappedEvents = allEvents.map { event ->
-                    val resolvedLoc = if (isTeamsMeeting(event.location)) {
-                        homeLocation
-                    } else {
-                        event.location
-                    }
+                val mappedEvents = dayEvents.map { event ->
+                    val resolvedLoc = if (isTeamsMeeting(event.location)) homeLocation else event.location
                     ScheduleItem.Event(
                         id = "event_${event.id}",
                         eventId = event.id,
@@ -180,89 +243,121 @@ class DashboardViewModel(
                     )
                 }.sortedBy { it.startTime }
                 
-                val pomodoroWork = preferencesManager.pomodoroWorkDurationFlow.firstOrNull()?.toLongOrNull() ?: 90L
-                val pomodoroBreak = preferencesManager.pomodoroBreakDurationFlow.firstOrNull()?.toLongOrNull() ?: 15L
-                
-                val pomodoroWorkMillis = maxOf(1L, pomodoroWork) * 60 * 1000L
-                val pomodoroBreakMillis = maxOf(0L, pomodoroBreak) * 60 * 1000L
+                val pomodoroWorkMillis = maxOf(1L, preferencesManager.pomodoroWorkDurationFlow.firstOrNull()?.toLongOrNull() ?: 90L) * 60 * 1000L
+                val pomodoroBreakMillis = maxOf(0L, preferencesManager.pomodoroBreakDurationFlow.firstOrNull()?.toLongOrNull() ?: 15L) * 60 * 1000L
 
-                // Inject Transit items before events if they have a location
-                var lastLocation = homeLocation // Start location is home
+                val items = mutableListOf<ScheduleItem>()
+                var lastLocation = homeLocation
+                var prevOccupiedEndTime = dayStart
+
+                fun parseIsoTime(isoStr: String?): Long? {
+                    if (isoStr.isNullOrBlank()) return null
+                    return try {
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+                            timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        }
+                        sdf.parse(isoStr)?.time
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
 
                 for (i in mappedEvents.indices) {
                     val event = mappedEvents[i]
                     val eventLoc = event.location
+
                     if (!eventLoc.isNullOrBlank() && eventLoc != lastLocation) {
-                        // Calculate commute from lastLocation to eventLoc
                         val commuteResult = calculateCommuteUseCase(
                             originName = lastLocation,
                             destinationName = eventLoc,
-                            timeMillis = event.startTime, // We want to arrive by the event start time
+                            timeMillis = event.startTime,
                             depArrMacro = "arr",
                             transportMode = transportMode
                         )
+
                         if (commuteResult != null && commuteResult.durationMillis > 0) {
-                            val transitStart = event.startTime - commuteResult.durationMillis
-                            
-                            // Add 'Get Ready' block if leaving from home
+                            val firstLegStart = commuteResult.legs.firstOrNull()?.departureTime?.let { parseIsoTime(it) }
+                            val lastLegEnd = commuteResult.legs.lastOrNull()?.arrivalTime?.let { parseIsoTime(it) }
+
+                            val transitStart = firstLegStart ?: (event.startTime - commuteResult.durationMillis)
+                            val transitEnd = lastLegEnd ?: event.startTime
+
                             if (lastLocation == homeLocation) {
                                 val isWorkOrCollege = (workLocation != null && eventLoc == workLocation) ||
                                                       (collegeLocation != null && eventLoc == collegeLocation) ||
                                                       event.title.contains("Work", ignoreCase = true) ||
                                                       event.title.contains("College", ignoreCase = true) ||
-                                                      event.title.contains("Class", ignoreCase = true) ||
-                                                      event.title.contains("Shift", ignoreCase = true) ||
-                                                      event.title.contains("Lecture", ignoreCase = true) ||
-                                                      event.title.contains("AIT", ignoreCase = true)
+                                                      event.title.contains("Class", ignoreCase = true)
 
-                                val getReadyDuration = if (isWorkOrCollege) 45 * 60 * 1000L else 5 * 60 * 1000L
+                                val desiredGetReadyDuration = if (isWorkOrCollege) 45 * 60 * 1000L else 15 * 60 * 1000L
                                 val getReadyTitle = if (isWorkOrCollege) "Get Ready to Leave" else "Quick Prep"
-                                val getReadyActivities = if (isWorkOrCollege) listOf("Shower", "Pack bag", "Breakfast") else listOf("Grab keys", "Lock door")
 
-                                val getReadyStart = transitStart - getReadyDuration
-                                items.add(
-                                    ScheduleItem.FocusBlock(
-                                        id = "get_ready_${event.eventId}",
-                                        title = getReadyTitle,
-                                        startTime = getReadyStart,
-                                        endTime = transitStart,
-                                        suggestedActivities = getReadyActivities
+                                val availablePrepTime = transitStart - maxOf(prevOccupiedEndTime, dayStart)
+                                if (availablePrepTime > 0) {
+                                    val actualPrepDuration = minOf(desiredGetReadyDuration, availablePrepTime)
+                                    val getReadyStart = transitStart - actualPrepDuration
+                                    items.add(
+                                        ScheduleItem.FocusBlock(
+                                            id = "get_ready_${event.eventId}",
+                                            title = getReadyTitle,
+                                            startTime = getReadyStart,
+                                            endTime = transitStart,
+                                            suggestedActivities = listOf("Shower & dress", "Pack bag", "Grab essentials")
+                                        )
                                     )
-                                )
+                                    prevOccupiedEndTime = transitStart
+                                }
                             } else {
-                                // Provide buffer to reach transit if already out
-                                val bufferStart = transitStart - (15 * 60 * 1000L)
-                                items.add(
-                                    ScheduleItem.FocusBlock(
-                                        id = "buffer_${event.eventId}",
-                                        title = "Buffer to Transit",
-                                        startTime = bufferStart,
-                                        endTime = transitStart,
-                                        suggestedActivities = listOf("Walk to transit stop")
+                                val availableBufferTime = transitStart - maxOf(prevOccupiedEndTime, dayStart)
+                                if (availableBufferTime > 0) {
+                                    val actualBuffer = minOf(15 * 60 * 1000L, availableBufferTime)
+                                    val bufferStart = transitStart - actualBuffer
+                                    items.add(
+                                        ScheduleItem.FocusBlock(
+                                            id = "buffer_${event.eventId}",
+                                            title = "Buffer to Transit",
+                                            startTime = bufferStart,
+                                            endTime = transitStart,
+                                            suggestedActivities = listOf("Walk to transit stop")
+                                        )
                                     )
-                                )
+                                    prevOccupiedEndTime = transitStart
+                                }
                             }
-                            
+
                             items.add(
-                                ScheduleItem.Transit(
+                                ScheduleItem.TransitTo(
                                     id = "transit_to_${event.eventId}",
                                     title = "Commute to ${eventLoc.take(15)}",
                                     startTime = transitStart,
-                                    endTime = event.startTime,
+                                    endTime = transitEnd,
                                     origin = lastLocation,
                                     destination = eventLoc,
-                                    durationMillis = commuteResult.durationMillis,
+                                    durationMillis = maxOf(commuteResult.durationMillis, transitEnd - transitStart),
                                     legs = commuteResult.legs
                                 )
                             )
-                        } else {
-                            android.util.Log.e("DashboardViewModel", "Commute failed from $lastLocation to $eventLoc")
+                            prevOccupiedEndTime = maxOf(prevOccupiedEndTime, transitEnd)
                         }
                         lastLocation = eventLoc
                     }
-                    items.add(event)
 
-                    // Check if returning home after this event is feasible
+                    val eventStart = maxOf(event.startTime, prevOccupiedEndTime)
+                    if (event.endTime > eventStart) {
+                        items.add(
+                            ScheduleItem.Event(
+                                id = event.id,
+                                eventId = event.eventId,
+                                title = event.title,
+                                startTime = eventStart,
+                                endTime = event.endTime,
+                                location = event.location,
+                                description = event.description
+                            )
+                        )
+                        prevOccupiedEndTime = event.endTime
+                    }
+
                     if (!eventLoc.isNullOrBlank() && eventLoc != homeLocation) {
                         val nextEventWithLoc = mappedEvents.drop(i + 1).firstOrNull { !it.location.isNullOrBlank() }
                         val nextStartTime = nextEventWithLoc?.startTime ?: dayEnd
@@ -276,77 +371,92 @@ class DashboardViewModel(
                         )
 
                         if (commuteHomeResult != null && commuteHomeResult.durationMillis > 0) {
-                            val commuteHomeEnd = event.endTime + commuteHomeResult.durationMillis
-                            val estNextTransitDuration = if (nextEventWithLoc != null && !nextEventWithLoc.location.isNullOrBlank()) {
-                                calculateCommuteUseCase(
-                                    originName = homeLocation,
-                                    destinationName = nextEventWithLoc.location,
-                                    timeMillis = nextEventWithLoc.startTime,
-                                    depArrMacro = "arr",
-                                    transportMode = transportMode
-                                )?.durationMillis ?: (30 * 60 * 1000L)
-                            } else 0L
+                            val homeFirstLegStart = commuteHomeResult.legs.firstOrNull()?.departureTime?.let { parseIsoTime(it) }
+                            val homeLastLegEnd = commuteHomeResult.legs.lastOrNull()?.arrivalTime?.let { parseIsoTime(it) }
 
-                            val requiredBuffer = 15 * 60 * 1000L
-                            val departureForNext = nextStartTime - estNextTransitDuration
+                            val commuteHomeStart = homeFirstLegStart ?: event.endTime
+                            val commuteHomeEnd = homeLastLegEnd ?: (commuteHomeStart + commuteHomeResult.durationMillis)
 
-                            if (commuteHomeEnd + requiredBuffer <= departureForNext || nextEventWithLoc == null) {
+                            items.add(
+                                ScheduleItem.TransitHome(
+                                    id = "transit_home_${event.eventId}",
+                                    title = "Commute Home",
+                                    startTime = commuteHomeStart,
+                                    endTime = commuteHomeEnd,
+                                    origin = eventLoc,
+                                    destination = homeLocation,
+                                    durationMillis = maxOf(commuteHomeResult.durationMillis, commuteHomeEnd - commuteHomeStart),
+                                    legs = commuteHomeResult.legs
+                                )
+                            )
+                            prevOccupiedEndTime = commuteHomeEnd
+
+                            val availableDecompressTime = maxOf(0L, nextStartTime - commuteHomeEnd)
+                            val decompressDuration = if (nextEventWithLoc == null) {
+                                decompressMinsVal * 60 * 1000L
+                            } else {
+                                minOf(decompressMinsVal * 60 * 1000L, availableDecompressTime)
+                            }
+
+                            if (decompressDuration >= 5 * 60 * 1000L) {
                                 items.add(
-                                    ScheduleItem.Transit(
-                                        id = "transit_home_${event.eventId}",
-                                        title = "Commute to Home",
-                                        startTime = event.endTime,
-                                        endTime = commuteHomeEnd,
-                                        origin = eventLoc,
-                                        destination = homeLocation,
-                                        durationMillis = commuteHomeResult.durationMillis,
-                                        legs = commuteHomeResult.legs
+                                    ScheduleItem.Decompression(
+                                        id = "decompress_${event.eventId}",
+                                        title = "Post-Commute Decompression",
+                                        startTime = commuteHomeEnd,
+                                        endTime = commuteHomeEnd + decompressDuration,
+                                        description = "Arrive home, shower, change clothes & unwind"
                                     )
                                 )
-                                lastLocation = homeLocation
+                                prevOccupiedEndTime = commuteHomeEnd + decompressDuration
+                            }
+                            lastLocation = homeLocation
+
+                            if (nextEventWithLoc == null && prevOccupiedEndTime > dayEnd) {
+                                dayEnd = prevOccupiedEndTime + (30 * 60 * 1000L)
                             }
                         }
                     }
                 }
 
-                // Sort occupied items chronologically
                 items.sortBy { it.startTime }
 
-                val finalItems = mutableListOf<ScheduleItem>()
-                var gapIndex = 0
+                val firstItemStart = items.firstOrNull()?.startTime ?: dayEnd
+                val morningRoutineDuration = morningMinsVal * 60 * 1000L
+                val availableMorningTime = maxOf(0L, firstItemStart - dayStart)
 
-                // 1. Inject Morning Routine: Clean up + Breakfast starting at dayStart (Wake Up Time)
-                val cleanUpEnd = dayStart + (30 * 60 * 1000L) // 30 mins
-                val breakfastEnd = cleanUpEnd + (30 * 60 * 1000L) // 30 mins
-                
-                // Check if any items conflict with morning routine (between dayStart and breakfastEnd)
-                val morningConflict = items.any { it.startTime < breakfastEnd && it.endTime > dayStart }
-
-                if (!morningConflict) {
-                    finalItems.add(
-                        ScheduleItem.FocusBlock(
-                            id = "morning_cleanup",
-                            title = "Morning Clean Up",
+                if (availableMorningTime >= 10 * 60 * 1000L) {
+                    val actualMorningDuration = minOf(morningRoutineDuration, availableMorningTime)
+                    items.add(
+                        0,
+                        ScheduleItem.MorningRoutine(
+                            id = "morning_routine",
+                            title = "Morning Routine & Breakfast",
                             startTime = dayStart,
-                            endTime = cleanUpEnd,
-                            suggestedActivities = listOf("Make bed", "Shower", "Get dressed")
-                        )
-                    )
-                    finalItems.add(
-                        ScheduleItem.FocusBlock(
-                            id = "morning_breakfast",
-                            title = "Breakfast",
-                            startTime = cleanUpEnd,
-                            endTime = breakfastEnd,
-                            suggestedActivities = listOf("Eat healthy breakfast", "Check emails")
+                            endTime = dayStart + actualMorningDuration,
+                            activities = listOf("Shower & hygiene", "Healthy breakfast", "Hydrate & plan day")
                         )
                     )
                 }
 
-                // 2. Process Gaps with Pomodoro logic (STRICTLY starting from maxOf(dayStart, breakfastEnd))
-                var currentFreeStart = if (!morningConflict) breakfastEnd else dayStart
-                
-                // Read pending milestones to use as focus block titles
+                items.sortBy { it.startTime }
+
+                val gapTargets = items.toMutableList()
+                val windDownStart = maxOf(dayStart, dayEnd - (60 * 60 * 1000L))
+                if (gapTargets.isEmpty() || gapTargets.last().endTime < windDownStart) {
+                    gapTargets.add(
+                        ScheduleItem.FocusBlock(
+                            id = "day_end_anchor",
+                            title = "Day End Anchor",
+                            startTime = windDownStart,
+                            endTime = windDownStart
+                        )
+                    )
+                }
+
+                val gapFilledItems = mutableListOf<ScheduleItem>()
+                var gapIndex = 0
+
                 val customMilestonesJson = preferencesManager.customMilestonesFlow.firstOrNull() ?: ""
                 val completedIdsJson = preferencesManager.completedMilestonesFlow.firstOrNull() ?: ""
                 val mainGoalsIdsJson = preferencesManager.mainGoalMilestonesFlow.firstOrNull() ?: ""
@@ -363,86 +473,156 @@ class DashboardViewModel(
                     if (mainGoalsIdsJson.isNotBlank()) kotlinx.serialization.json.Json.decodeFromString<List<String>>(mainGoalsIdsJson).toSet() else emptySet()
                 } catch(e: Exception) { emptySet() }
                 
-                // Also pull from college events to merge pending tasks
                 val collegeUrl = preferencesManager.collegeCalendarUrlFlow.firstOrNull() ?: ""
-                val collegeEvents = if (collegeUrl.isNotBlank()) {
-                    ICalDataSource().fetchEvents(collegeUrl)
-                } else emptyList()
-                
+                val collegeEvents = if (collegeUrl.isNotBlank()) ICalDataSource().fetchEvents(collegeUrl) else emptyList()
                 val allMilestones = customMilestones + collegeEvents.map { Milestone(it.id.toString(), it.title) }
 
-                // Only get bookmarked (mainGoalIds) AND uncompleted (!completedIds) tasks
                 val bookmarkedTasks = allMilestones
                     .filter { mainGoalIds.contains(it.id) && !completedIds.contains(it.id) }
                     .map { it.title }
 
                 var bookmarkedIndex = 0
 
-                for (item in items) {
-                    val itemStart = item.startTime
-                    val itemEnd = item.endTime
+                val calLunchStart = Calendar.getInstance().apply {
+                    timeInMillis = _selectedDateMillis.value
+                    set(Calendar.HOUR_OF_DAY, 12)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }.timeInMillis
 
-                    // Skip gap calculation for items ending before/at currentFreeStart (e.g. early/past events)
-                    if (itemEnd <= currentFreeStart) {
-                        finalItems.add(item)
-                        continue
-                    }
+                val calDinnerStart = Calendar.getInstance().apply {
+                    timeInMillis = _selectedDateMillis.value
+                    set(Calendar.HOUR_OF_DAY, 18)
+                    set(Calendar.MINUTE, 30)
+                    set(Calendar.SECOND, 0)
+                }.timeInMillis
 
-                    val effectiveGapStart = maxOf(currentFreeStart, dayStart)
-                    if (effectiveGapStart < itemStart) {
-                        var chunkStart = effectiveGapStart
-                        // Generate 90 min work + 15 min break chunks until we hit itemStart
-                        while (chunkStart < itemStart) {
-                            val remainingGap = itemStart - chunkStart
-                            if (remainingGap < 30 * 60 * 1000L) {
-                                // Small gap, just add a generic block
-                                finalItems.add(
-                                    ScheduleItem.FocusBlock(
-                                        id = "gap_${gapIndex++}",
-                                        title = "Free Time",
+                var lunchScheduled = false
+                var dinnerScheduled = false
+
+                var cursor = dayStart
+
+                for (item in gapTargets) {
+                    if (item.startTime > cursor) {
+                        var chunkStart = cursor
+                        val gapEnd = item.startTime
+
+                        while (chunkStart < gapEnd) {
+                            val remainingGap = gapEnd - chunkStart
+                            val minStudyMillis = minStudySlotMinsVal * 60 * 1000L
+
+                            // Lunch Anchor Check
+                            if (!lunchScheduled && chunkStart >= calLunchStart - (60 * 60 * 1000L) && chunkStart <= calLunchStart + (90 * 60 * 1000L)) {
+                                val lunchMillis = minOf(lunchMinsVal * 60 * 1000L, remainingGap)
+                                val lunchEnd = chunkStart + lunchMillis
+                                gapFilledItems.add(
+                                    ScheduleItem.MealPrepAndEat(
+                                        id = "lunch_anchor_${gapIndex++}",
+                                        title = "Lunch & Reset",
                                         startTime = chunkStart,
-                                        endTime = itemStart,
-                                        suggestedActivities = listOf("Relax", "Stretch", "Check phone")
+                                        endTime = lunchEnd,
+                                        mealType = "Lunch"
                                     )
                                 )
+                                chunkStart = lunchEnd
+                                lunchScheduled = true
+                                continue
+                            }
+
+                            // Dinner Anchor Check (MUST be before late shift starts!)
+                            if (!dinnerScheduled && chunkStart < lateShiftStart && (hasLateShift || (chunkStart >= calDinnerStart - (30 * 60 * 1000L) && chunkStart <= calDinnerStart + (120 * 60 * 1000L)))) {
+                                val dinnerMillis = minOf(dinnerMinsVal * 60 * 1000L, remainingGap)
+                                val dinnerEnd = chunkStart + dinnerMillis
+                                val dinnerTitle = if (hasLateShift) "Dinner & Meal Prep before Shift" else if (isQuickMeal) "Quick Dinner / Leftovers" else "Meal Prep, Dinner & Cleanup"
+                                gapFilledItems.add(
+                                    ScheduleItem.MealPrepAndEat(
+                                        id = "dinner_anchor_${gapIndex++}",
+                                        title = dinnerTitle,
+                                        startTime = chunkStart,
+                                        endTime = dinnerEnd,
+                                        mealType = "Dinner"
+                                    )
+                                )
+                                chunkStart = dinnerEnd
+                                dinnerScheduled = true
+                                continue
+                            }
+
+                            // IF HAS LATE SHIFT AND chunkStart < lateShiftStart: Pre-Shift Rest & Prep
+                            if (hasLateShift && chunkStart < lateShiftStart) {
+                                gapFilledItems.add(
+                                    ScheduleItem.MicroBreak(
+                                        id = "pre_shift_rest_${gapIndex++}",
+                                        title = "Pre-Shift Rest & Prep",
+                                        startTime = chunkStart,
+                                        endTime = gapEnd,
+                                        description = "Unwind, hydrate & prepare for evening work"
+                                    )
+                                )
+                                chunkStart = gapEnd
+                                break
+                            }
+
+                            if (remainingGap < minStudyMillis) {
+                                gapFilledItems.add(
+                                    ScheduleItem.MicroBreak(
+                                        id = "micro_break_${gapIndex++}",
+                                        title = "Micro Break",
+                                        startTime = chunkStart,
+                                        endTime = gapEnd,
+                                        description = "Short break, stretch & hydrate"
+                                    )
+                                )
+                                chunkStart = gapEnd
                                 break
                             } else {
-                                // We have at least 30 mins. Try to allocate pomodoro work.
-                                val workDuration = minOf(pomodoroWorkMillis, remainingGap)
-                                val workEnd = chunkStart + workDuration
-                                
-                                val nextTask = if (bookmarkedTasks.isNotEmpty()) {
-                                    val task = bookmarkedTasks[bookmarkedIndex % bookmarkedTasks.size]
-                                    bookmarkedIndex++
-                                    task
-                                } else {
-                                    "Study/Assignment Work"
+                                val studyPrepMillis = studyPrepMinsVal * 60 * 1000L
+                                if (remainingGap >= studyPrepMillis + minStudyMillis) {
+                                    val setupEnd = chunkStart + studyPrepMillis
+                                    gapFilledItems.add(
+                                        ScheduleItem.StudySetup(
+                                            id = "study_setup_${gapIndex++}",
+                                            title = "Workspace Prep",
+                                            startTime = chunkStart,
+                                            endTime = setupEnd,
+                                            description = "Clear workspace, open notes & grab water"
+                                        )
+                                    )
+                                    chunkStart = setupEnd
                                 }
-                                
-                                finalItems.add(
-                                    ScheduleItem.FocusBlock(
-                                        id = "work_${gapIndex++}",
+
+                                val availableStudyTime = gapEnd - chunkStart
+                                val studyDuration = minOf(pomodoroWorkMillis, availableStudyTime)
+                                val studyEnd = chunkStart + studyDuration
+
+                                val nextTask = if (bookmarkedTasks.isNotEmpty()) {
+                                    val t = bookmarkedTasks[bookmarkedIndex % bookmarkedTasks.size]
+                                    bookmarkedIndex++
+                                    t
+                                } else "Deep Study & Assignment Work"
+
+                                gapFilledItems.add(
+                                    ScheduleItem.DeepStudy(
+                                        id = "deep_study_${gapIndex++}",
                                         title = nextTask,
                                         startTime = chunkStart,
-                                        endTime = workEnd,
-                                        suggestedActivities = listOf("Deep work", "Focus on top priority task")
+                                        endTime = studyEnd,
+                                        taskName = nextTask
                                     )
                                 )
-                                
-                                chunkStart = workEnd
-                                
-                                // If there's still time left, try to allocate a break
-                                val breakRemaining = itemStart - chunkStart
+                                chunkStart = studyEnd
+
+                                val breakRemaining = gapEnd - chunkStart
                                 if (breakRemaining > 0 && pomodoroBreakMillis > 0) {
                                     val breakDuration = minOf(pomodoroBreakMillis, breakRemaining)
                                     val breakEnd = chunkStart + breakDuration
-                                    finalItems.add(
-                                        ScheduleItem.FocusBlock(
+                                    gapFilledItems.add(
+                                        ScheduleItem.MicroBreak(
                                             id = "break_${gapIndex++}",
                                             title = "Break",
                                             startTime = chunkStart,
                                             endTime = breakEnd,
-                                            suggestedActivities = listOf("Walk around", "Drink water", "Rest eyes")
+                                            description = "Rest eyes, walk around & hydrate"
                                         )
                                     )
                                     chunkStart = breakEnd
@@ -450,90 +630,60 @@ class DashboardViewModel(
                             }
                         }
                     }
-                    finalItems.add(item)
-                    if (itemEnd > currentFreeStart) {
-                        currentFreeStart = itemEnd
+
+                    if (item.id != "day_end_anchor") {
+                        gapFilledItems.add(item)
+                    }
+                    if (item.endTime > cursor) {
+                        cursor = item.endTime
                     }
                 }
 
-
-                // 3. Process remaining time until Wind Down
-                val windDownStart = dayEnd - (60 * 60 * 1000L) // 1 hour before sleep
-                
-                if (currentFreeStart < windDownStart) {
-                    var chunkStart = currentFreeStart
-                    while (chunkStart < windDownStart) {
-                        val remainingGap = windDownStart - chunkStart
-                        if (remainingGap < 30 * 60 * 1000L) {
-                            finalItems.add(
-                                ScheduleItem.FocusBlock(
-                                    id = "gap_${gapIndex++}",
-                                    title = "Free Time",
-                                    startTime = chunkStart,
-                                    endTime = windDownStart,
-                                    suggestedActivities = listOf("Relax", "Stretch")
-                                )
-                            )
-                            break
-                        } else {
-                            val workDuration = minOf(pomodoroWorkMillis, remainingGap)
-                            val workEnd = chunkStart + workDuration
-                            
-                            val nextTask = if (bookmarkedTasks.isNotEmpty()) {
-                                val task = bookmarkedTasks[bookmarkedIndex % bookmarkedTasks.size]
-                                bookmarkedIndex++
-                                task
-                            } else {
-                                "Study/Assignment Work"
-                            }
-                            
-                            finalItems.add(
-                                ScheduleItem.FocusBlock(
-                                    id = "work_${gapIndex++}",
-                                    title = nextTask,
-                                    startTime = chunkStart,
-                                    endTime = workEnd,
-                                    suggestedActivities = listOf("Deep work")
-                                )
-                            )
-                            chunkStart = workEnd
-                            
-                            val breakRemaining = windDownStart - chunkStart
-                            if (breakRemaining > 0 && pomodoroBreakMillis > 0) {
-                                val breakDuration = minOf(pomodoroBreakMillis, breakRemaining)
-                                val breakEnd = chunkStart + breakDuration
-                                finalItems.add(
-                                    ScheduleItem.FocusBlock(
-                                        id = "break_${gapIndex++}",
-                                        title = "Break",
-                                        startTime = chunkStart,
-                                        endTime = breakEnd,
-                                        suggestedActivities = listOf("Rest")
-                                    )
-                                )
-                                chunkStart = breakEnd
-                            }
-                        }
-                    }
-                }
-                
-                // 4. Inject Evening Routine: Wind Down
-                val finalWindDownStart = maxOf(currentFreeStart, windDownStart)
+                // Evening Wind Down
+                val finalWindDownStart = maxOf(cursor, windDownStart)
                 if (finalWindDownStart < dayEnd) {
-                    finalItems.add(
-                        ScheduleItem.FocusBlock(
+                    gapFilledItems.add(
+                        ScheduleItem.Sleep(
                             id = "evening_wind_down",
-                            title = "Wind Down",
+                            title = "Evening Wind Down",
                             startTime = finalWindDownStart,
                             endTime = dayEnd,
-                            suggestedActivities = listOf("Read a book", "Prepare for tomorrow", "No screens")
+                            description = "Unwind, prepare for tomorrow, no screens"
                         )
                     )
                 }
 
+                // Final Pass: Ensure strict non-overlap invariant
+                gapFilledItems.sortBy { it.startTime }
+                val finalItems = mutableListOf<ScheduleItem>()
+                var timelineCursor = dayStart
+
+                for (item in gapFilledItems) {
+                    if (item.startTime < timelineCursor) {
+                        val newStart = timelineCursor
+                        if (item.endTime <= newStart) continue
+
+                        val adjustedItem = when (item) {
+                            is ScheduleItem.FocusBlock -> item.copy(startTime = newStart)
+                            is ScheduleItem.MorningRoutine -> item.copy(startTime = newStart)
+                            is ScheduleItem.Decompression -> item.copy(startTime = newStart)
+                            is ScheduleItem.MealPrepAndEat -> item.copy(startTime = newStart)
+                            is ScheduleItem.StudySetup -> item.copy(startTime = newStart)
+                            is ScheduleItem.DeepStudy -> item.copy(startTime = newStart)
+                            is ScheduleItem.MicroBreak -> item.copy(startTime = newStart)
+                            else -> item
+                        }
+                        finalItems.add(adjustedItem)
+                        timelineCursor = adjustedItem.endTime
+                    } else {
+                        finalItems.add(item)
+                        timelineCursor = item.endTime
+                    }
+                }
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    scheduleItems = finalItems
+                    scheduleItems = finalItems.sortedBy { it.startTime }
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

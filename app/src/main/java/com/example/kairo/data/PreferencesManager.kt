@@ -30,19 +30,24 @@ class PreferencesManager(private val context: Context) {
         val USER_NAME = stringPreferencesKey("user_name")
         val POMODORO_WORK_DURATION = stringPreferencesKey("pomodoro_work_duration")
         val POMODORO_BREAK_DURATION = stringPreferencesKey("pomodoro_break_duration")
+
+        val MORNING_ROUTINE_MINS = stringPreferencesKey("morning_routine_mins")
+        val POST_COMMUTE_DECOMPRESS_MINS = stringPreferencesKey("post_commute_decompress_mins")
+        val STUDY_PREP_BUFFER_MINS = stringPreferencesKey("study_prep_buffer_mins")
+        val LUNCH_DURATION_MINS = stringPreferencesKey("lunch_duration_mins")
+        val DINNER_PREP_AND_EAT_MINS = stringPreferencesKey("dinner_prep_and_eat_mins")
+        val MIN_STUDY_SLOT_MINS = stringPreferencesKey("min_study_slot_mins")
+        val QUICK_MEAL_MODE = stringPreferencesKey("quick_meal_mode")
+        val RUNNING_LATE_MINS = stringPreferencesKey("running_late_mins")
     }
 
     val preferencesFlow: Flow<Preferences> = context.dataStore.data
 
     val workCalendarUrlFlow: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[WORK_CALENDAR_URL] ?: ""
-        }
+        .map { preferences -> preferences[WORK_CALENDAR_URL] ?: "" }
 
     val collegeCalendarUrlFlow: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[COLLEGE_CALENDAR_URL] ?: ""
-        }
+        .map { preferences -> preferences[COLLEGE_CALENDAR_URL] ?: "" }
 
     val personalCalendarUrlFlow: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[PERSONAL_CALENDAR_URL] ?: "" }
@@ -59,16 +64,36 @@ class PreferencesManager(private val context: Context) {
     val pomodoroBreakDurationFlow: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[POMODORO_BREAK_DURATION] ?: "15" }
 
+    val morningRoutineMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[MORNING_ROUTINE_MINS] ?: "40" }
+
+    val postCommuteDecompressMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[POST_COMMUTE_DECOMPRESS_MINS] ?: "35" }
+
+    val studyPrepBufferMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[STUDY_PREP_BUFFER_MINS] ?: "15" }
+
+    val lunchDurationMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[LUNCH_DURATION_MINS] ?: "45" }
+
+    val dinnerPrepAndEatMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[DINNER_PREP_AND_EAT_MINS] ?: "60" }
+
+    val minStudySlotMinsFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[MIN_STUDY_SLOT_MINS] ?: "35" }
+
+    val quickMealModeFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[QUICK_MEAL_MODE]?.toBoolean() ?: false }
+
+    val runningLateMinsFlow: Flow<Int> = context.dataStore.data
+        .map { preferences -> preferences[RUNNING_LATE_MINS]?.toIntOrNull() ?: 0 }
+
     suspend fun saveWorkCalendarUrl(url: String) {
-        context.dataStore.edit { preferences ->
-            preferences[WORK_CALENDAR_URL] = url
-        }
+        context.dataStore.edit { preferences -> preferences[WORK_CALENDAR_URL] = url }
     }
 
     suspend fun saveCollegeCalendarUrl(url: String) {
-        context.dataStore.edit { preferences ->
-            preferences[COLLEGE_CALENDAR_URL] = url
-        }
+        context.dataStore.edit { preferences -> preferences[COLLEGE_CALENDAR_URL] = url }
     }
 
     suspend fun savePersonalCalendarUrl(url: String) {
@@ -153,6 +178,36 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun saveHumanRoutineBuffers(
+        morning: String,
+        decompress: String,
+        studyPrep: String,
+        lunch: String,
+        dinner: String,
+        minStudy: String
+    ) {
+        context.dataStore.edit { preferences ->
+            preferences[MORNING_ROUTINE_MINS] = morning
+            preferences[POST_COMMUTE_DECOMPRESS_MINS] = decompress
+            preferences[STUDY_PREP_BUFFER_MINS] = studyPrep
+            preferences[LUNCH_DURATION_MINS] = lunch
+            preferences[DINNER_PREP_AND_EAT_MINS] = dinner
+            preferences[MIN_STUDY_SLOT_MINS] = minStudy
+        }
+    }
+
+    suspend fun toggleQuickMealMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[QUICK_MEAL_MODE] = enabled.toString()
+        }
+    }
+
+    suspend fun setRunningLateMins(mins: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[RUNNING_LATE_MINS] = mins.toString()
+        }
+    }
+
     suspend fun exportRemoteUserSettings(userId: String): com.example.kairo.data.remote.RemoteUserSettings {
         val preferences = context.dataStore.data.first()
         return com.example.kairo.data.remote.RemoteUserSettings(
@@ -169,6 +224,12 @@ class PreferencesManager(private val context: Context) {
             transportMode = preferences[TRANSPORT_MODE] ?: "All Public Transport",
             pomodoroWorkDuration = preferences[POMODORO_WORK_DURATION] ?: "90",
             pomodoroBreakDuration = preferences[POMODORO_BREAK_DURATION] ?: "15",
+            morningRoutineMins = preferences[MORNING_ROUTINE_MINS] ?: "40",
+            postCommuteDecompressMins = preferences[POST_COMMUTE_DECOMPRESS_MINS] ?: "35",
+            studyPrepBufferMins = preferences[STUDY_PREP_BUFFER_MINS] ?: "15",
+            lunchDurationMins = preferences[LUNCH_DURATION_MINS] ?: "45",
+            dinnerPrepAndEatMins = preferences[DINNER_PREP_AND_EAT_MINS] ?: "60",
+            minStudySlotMins = preferences[MIN_STUDY_SLOT_MINS] ?: "35",
             customMilestones = preferences[CUSTOM_MILESTONES] ?: "",
             completedMilestones = preferences[COMPLETED_MILESTONES] ?: "",
             mainGoalMilestones = preferences[MAIN_GOAL_MILESTONES] ?: "",
@@ -190,6 +251,12 @@ class PreferencesManager(private val context: Context) {
             if (remote.transportMode.isNotBlank()) preferences[TRANSPORT_MODE] = remote.transportMode
             if (remote.pomodoroWorkDuration.isNotBlank()) preferences[POMODORO_WORK_DURATION] = remote.pomodoroWorkDuration
             if (remote.pomodoroBreakDuration.isNotBlank()) preferences[POMODORO_BREAK_DURATION] = remote.pomodoroBreakDuration
+            if (remote.morningRoutineMins.isNotBlank()) preferences[MORNING_ROUTINE_MINS] = remote.morningRoutineMins
+            if (remote.postCommuteDecompressMins.isNotBlank()) preferences[POST_COMMUTE_DECOMPRESS_MINS] = remote.postCommuteDecompressMins
+            if (remote.studyPrepBufferMins.isNotBlank()) preferences[STUDY_PREP_BUFFER_MINS] = remote.studyPrepBufferMins
+            if (remote.lunchDurationMins.isNotBlank()) preferences[LUNCH_DURATION_MINS] = remote.lunchDurationMins
+            if (remote.dinnerPrepAndEatMins.isNotBlank()) preferences[DINNER_PREP_AND_EAT_MINS] = remote.dinnerPrepAndEatMins
+            if (remote.minStudySlotMins.isNotBlank()) preferences[MIN_STUDY_SLOT_MINS] = remote.minStudySlotMins
             if (remote.customMilestones.isNotBlank()) preferences[CUSTOM_MILESTONES] = remote.customMilestones
             if (remote.completedMilestones.isNotBlank()) preferences[COMPLETED_MILESTONES] = remote.completedMilestones
             if (remote.mainGoalMilestones.isNotBlank()) preferences[MAIN_GOAL_MILESTONES] = remote.mainGoalMilestones

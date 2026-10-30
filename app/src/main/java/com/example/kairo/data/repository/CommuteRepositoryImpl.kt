@@ -106,6 +106,10 @@ class CommuteRepositoryImpl(
     }
 
     override suspend fun validateLocation(locationName: String): Boolean {
+        if (locationName.isBlank()) return false
+        if (BuildConfig.TFNSW_API_KEY.isBlank()) {
+            return true
+        }
         return try {
             val response = apiService.findStop(
                 authHeader = "apikey ${BuildConfig.TFNSW_API_KEY}",
@@ -114,20 +118,24 @@ class CommuteRepositoryImpl(
             val locations = response.locations
             !locations.isNullOrEmpty()
         } catch (e: Exception) {
-            e.printStackTrace()
-            false
+            android.util.Log.w("CommuteRepo", "TfNSW API error during validation, allowing entry: ${e.message}")
+            true
         }
     }
 
     override suspend fun getLocationSuggestions(query: String): List<String> {
+        if (query.isBlank()) return emptyList()
+        if (BuildConfig.TFNSW_API_KEY.isBlank()) {
+            return emptyList()
+        }
         return try {
             val response = apiService.findStop(
                 authHeader = "apikey ${BuildConfig.TFNSW_API_KEY}",
                 nameSf = query
             )
-            response.locations?.mapNotNull { it.name } ?: emptyList()
+            response.locations?.mapNotNull { it.name }?.distinct() ?: emptyList()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("CommuteRepo", "TfNSW API error during suggestion search: ${e.message}")
             emptyList()
         }
     }

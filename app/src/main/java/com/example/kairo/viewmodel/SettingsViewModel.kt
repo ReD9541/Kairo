@@ -59,6 +59,24 @@ class SettingsViewModel(
     private val _pomodoroBreakDuration = MutableStateFlow("15")
     val pomodoroBreakDuration: StateFlow<String> = _pomodoroBreakDuration.asStateFlow()
 
+    private val _morningRoutineMins = MutableStateFlow("40")
+    val morningRoutineMins: StateFlow<String> = _morningRoutineMins.asStateFlow()
+
+    private val _postCommuteDecompressMins = MutableStateFlow("35")
+    val postCommuteDecompressMins: StateFlow<String> = _postCommuteDecompressMins.asStateFlow()
+
+    private val _studyPrepBufferMins = MutableStateFlow("15")
+    val studyPrepBufferMins: StateFlow<String> = _studyPrepBufferMins.asStateFlow()
+
+    private val _lunchDurationMins = MutableStateFlow("45")
+    val lunchDurationMins: StateFlow<String> = _lunchDurationMins.asStateFlow()
+
+    private val _dinnerPrepAndEatMins = MutableStateFlow("60")
+    val dinnerPrepAndEatMins: StateFlow<String> = _dinnerPrepAndEatMins.asStateFlow()
+
+    private val _minStudySlotMins = MutableStateFlow("35")
+    val minStudySlotMins: StateFlow<String> = _minStudySlotMins.asStateFlow()
+
     private val _isValidatingWork = MutableStateFlow(false)
     val isValidatingWork: StateFlow<Boolean> = _isValidatingWork.asStateFlow()
 
@@ -103,11 +121,6 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
-            preferencesManager.homeLocationFlow.collectLatest { loc ->
-                _homeLocation.value = loc
-            }
-        }
-        viewModelScope.launch {
             preferencesManager.collegeLocationFlow.collectLatest { loc ->
                 _collegeLocation.value = loc
             }
@@ -132,6 +145,36 @@ class SettingsViewModel(
                 _pomodoroBreakDuration.value = brk
             }
         }
+        viewModelScope.launch {
+            preferencesManager.morningRoutineMinsFlow.collectLatest { v ->
+                _morningRoutineMins.value = v
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.postCommuteDecompressMinsFlow.collectLatest { v ->
+                _postCommuteDecompressMins.value = v
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.studyPrepBufferMinsFlow.collectLatest { v ->
+                _studyPrepBufferMins.value = v
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.lunchDurationMinsFlow.collectLatest { v ->
+                _lunchDurationMins.value = v
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.dinnerPrepAndEatMinsFlow.collectLatest { v ->
+                _dinnerPrepAndEatMins.value = v
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.minStudySlotMinsFlow.collectLatest { v ->
+                _minStudySlotMins.value = v
+            }
+        }
     }
 
     fun saveAllSettings(
@@ -143,7 +186,13 @@ class SettingsViewModel(
         collegeLoc: String,
         mode: String,
         pomodoroWork: String,
-        pomodoroBreak: String
+        pomodoroBreak: String,
+        morning: String = _morningRoutineMins.value,
+        decompress: String = _postCommuteDecompressMins.value,
+        studyPrep: String = _studyPrepBufferMins.value,
+        lunch: String = _lunchDurationMins.value,
+        dinner: String = _dinnerPrepAndEatMins.value,
+        minStudy: String = _minStudySlotMins.value
     ) {
         viewModelScope.launch {
             _isValidatingWork.value = true
@@ -184,6 +233,14 @@ class SettingsViewModel(
             preferencesManager.saveCollegeLocation(collegeLoc)
             preferencesManager.saveTransportMode(mode)
             preferencesManager.savePomodoroDurations(pomodoroWork, pomodoroBreak)
+            preferencesManager.saveHumanRoutineBuffers(
+                morning = morning,
+                decompress = decompress,
+                studyPrep = studyPrep,
+                lunch = lunch,
+                dinner = dinner,
+                minStudy = minStudy
+            )
             
             authRepository.currentUser?.id?.let { userId ->
                 authRepository.pushLocalToRemote(userId)
