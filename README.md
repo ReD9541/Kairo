@@ -143,29 +143,6 @@ Open the project in Android Studio or compile using Gradle:
 
 ---
 
-## 🌐 Deploying to GitHub Pages
-
-You can host this documentation directly on **GitHub Pages**:
-
-1. Go to your repository on GitHub: `https://github.com/ReD9541/Kairo`.
-2. Navigate to **Settings** > **Pages** (under "Code and automation").
-3. Under **Build and deployment**:
-   * **Source**: Select `Deploy from a branch`.
-   * **Branch**: Choose `master` (or `main`) and set the folder to `/ (root)`.
-4. Click **Save**.
-5. Your GitHub Pages site will be live within minutes at:
-   ```
-   https://<your-username>.github.io/Kairo/
-   ```
-
-*(Optional)* To apply a modern Jekyll theme (like Cayman or Slate), you can add a `_config.yml` file to the root of the repository:
-```yaml
-theme: jekyll-theme-cayman
-title: Kairo
-description: Intelligent Circadian Routine & Transit Scheduler for Android
-```
-
----
 
 ## 🔒 Permissions & Security
 
