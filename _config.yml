@@ -1,0 +1,5 @@
+theme: jekyll-theme-cayman
+title: Kairo
+description: An intelligent, circadian-aware daily schedule and transit orchestrator for Android.
+show_downloads: false
+google_analytics:
